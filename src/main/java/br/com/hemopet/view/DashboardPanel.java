@@ -1,340 +1,149 @@
-
 package br.com.hemopet.view;
 
 import br.com.hemopet.dao.DashboardDao;
+import br.com.hemopet.model.DashboardFilter;
 import br.com.hemopet.model.DashboardMetric;
-
-import org.jfree.chart.ChartFactory;
-import org.jfree.chart.ChartPanel;
-import org.jfree.chart.JFreeChart;
-
+import org.jfree.chart.*;
 import org.jfree.data.category.DefaultCategoryDataset;
 import org.jfree.data.general.DefaultPieDataset;
-
-import javax.swing.JButton;
-import javax.swing.JLabel;
-import javax.swing.JPanel;
-import javax.swing.JScrollPane;
-
-import java.awt.BorderLayout;
-import java.awt.Dimension;
-import java.awt.Font;
-import java.awt.GridLayout;
-import java.awt.Color;
-import java.awt.Component;
-
+import javax.swing.*;
+import java.awt.*;
 import java.text.NumberFormat;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
 public class DashboardPanel extends JPanel {
-
-    private final DashboardDao dashboardDao = new DashboardDao();
-
     private final JPanel content = new JPanel();
-
-    private final NumberFormat numberFormat =
-            NumberFormat.getNumberInstance(new Locale("pt", "BR"));
+    private final JComboBox<String> species = new JComboBox<>(new String[]{"Todas", "CAO", "GATO"});
+    private final JComboBox<String> authorized = new JComboBox<>(new String[]{"Todos", "Autorizados", "Nao autorizados"});
+    private final JTextField start = new JTextField(10);
+    private final JTextField end = new JTextField(10);
+    private final JLabel state = new JLabel(" ");
+    private final NumberFormat numberFormat = NumberFormat.getNumberInstance(new Locale("pt", "BR"));
+    private int generation;
+    private record Data(List<DashboardMetric> metrics, double percentage, Map<String, Double> stats,
+                        List<Map<String, Integer>> groups, Map<String, Double> monthly) { }
 
     public DashboardPanel() {
         setLayout(new BorderLayout(12, 12));
         setBackground(UiUtils.BACKGROUND);
-
         numberFormat.setMaximumFractionDigits(2);
         numberFormat.setMinimumFractionDigits(2);
-
-        JButton refreshButton = new JButton("Atualizar");
-        refreshButton.addActionListener(event -> loadDashboard());
-
-        JPanel top = new JPanel(new BorderLayout());
-        top.setBackground(UiUtils.BACKGROUND);
-
-        JLabel title = new JLabel("Dashboard");
-        title.setFont(UiUtils.titleFont());
-
-        top.add(title, BorderLayout.WEST);
-        top.add(refreshButton, BorderLayout.EAST);
-
-        content.setLayout(new javax.swing.BoxLayout(
-                content, javax.swing.BoxLayout.Y_AXIS));
-
+        JPanel top = new JPanel(new GridLayout(0, 1, 4, 4));
+        JPanel filters = UiUtils.card();
+        filters.add(new JLabel("Especie")); filters.add(species);
+        filters.add(new JLabel("Doacao")); filters.add(authorized);
+        filters.add(new JLabel("De (AAAA-MM-DD)")); filters.add(start);
+        filters.add(new JLabel("Ate (AAAA-MM-DD)")); filters.add(end);
+        JButton apply = new JButton("Aplicar / atualizar");
+        JButton clear = new JButton("Limpar");
+        filters.add(apply); filters.add(clear);
+        JPanel help = UiUtils.card();
+        help.setLayout(new BorderLayout());
+        help.add(new JLabel("<html>Especie e autorizacao filtram animais e seus vinculos. Periodo: coletas e solicitacoes; bolsas pela data da coleta.<br>"
+                + "Pessoas, hospitais e veterinarios mostram totais gerais. Graficos: passe o mouse para detalhes; use o menu do botao direito para zoom e exportacao.</html>"), BorderLayout.CENTER);
+        help.add(state, BorderLayout.EAST);
+        top.add(filters); top.add(help);
+        content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
         content.setBackground(UiUtils.BACKGROUND);
-
-        JScrollPane scrollPane = new JScrollPane(content);
-        scrollPane.setBorder(null);
-        scrollPane.getViewport().setBackground(UiUtils.BACKGROUND);
-
-        add(top, BorderLayout.NORTH);
-        add(scrollPane, BorderLayout.CENTER);
-
-        loadDashboard();
+        JScrollPane scroll = new JScrollPane(content);
+        scroll.getVerticalScrollBar().setUnitIncrement(24);
+        scroll.setBorder(null);
+        add(top, BorderLayout.NORTH); add(scroll, BorderLayout.CENTER);
+        apply.addActionListener(e -> refresh());
+        clear.addActionListener(e -> {
+            species.setSelectedIndex(0); authorized.setSelectedIndex(0);
+            start.setText(""); end.setText(""); refresh();
+        });
+        refresh();
     }
-
-    private void loadDashboard() {
+    public void refresh() {
         try {
-            content.removeAll();
-
-            content.add(createMetricsPanel());
-            content.add(createStatisticsPanel());
-            content.add(createChartsPanel());
-
-            content.revalidate();
-            content.repaint();
-
-        } catch (RuntimeException exception) {
-            UiUtils.showError(this, exception);
-        }
+            DashboardFilter filter = new DashboardFilter(
+                    species.getSelectedIndex() == 0 ? null : (String) species.getSelectedItem(),
+                    authorized.getSelectedIndex() == 0 ? null : authorized.getSelectedIndex() == 1,
+                    date(start), date(end));
+            int request = ++generation;
+            state.setText("Carregando...");
+            UiUtils.loadAsync(this, () -> load(filter), data -> {
+                if (request != generation) return;
+                display(data);
+                state.setText("Atualizado");
+            }, error -> {
+                if (request != generation) return;
+                state.setText("Falha ao carregar");
+                UiUtils.showError(this, error);
+            });
+        } catch (RuntimeException e) { UiUtils.showError(this, e); }
     }
-
-    // -----------------------------------------------------
-    // INDICADORES GERAIS
-    // -----------------------------------------------------
-
-    private JPanel createMetricsPanel() {
-
-        JPanel panel = new JPanel(new GridLayout(2, 4, 12, 12));
-        panel.setBackground(UiUtils.BACKGROUND);
-
-        List<DashboardMetric> metrics = List.of(
-                dashboardDao.countAnimals(),
-                dashboardDao.countHospitals(),
-                dashboardDao.countPeople(),
-                dashboardDao.countVeterinarians(),
-                dashboardDao.countCollections(),
-                dashboardDao.countPendingRequests(),
-                dashboardDao.countAvailableBags()
-        );
-
-        for (DashboardMetric metric : metrics) {
-            panel.add(createMetricCard(
-                    metric.label(),
-                    String.valueOf(metric.value())
-            ));
-        }
-
-        double percentage =
-                dashboardDao.percentageAuthorizedAnimals();
-
-        panel.add(createMetricCard(
-                "Animais autorizados",
-                formatNumber(percentage) + "%"
-        ));
-
-        return panel;
+    private static LocalDate date(JTextField field) {
+        return field.getText().isBlank() ? null : LocalDate.parse(field.getText().trim());
     }
-
-    private JPanel createMetricCard(String label, String valueText) {
-
-        JPanel card = UiUtils.card();
-        card.setLayout(new BorderLayout(4, 4));
-
-        JLabel value = new JLabel(valueText);
-        value.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 24));
-        value.setForeground(UiUtils.PRIMARY);
-
-        JLabel description = new JLabel(label);
-
-        card.add(value, BorderLayout.CENTER);
-        card.add(description, BorderLayout.SOUTH);
-
+    private Data load(DashboardFilter filter) {
+        DashboardDao dao = new DashboardDao(filter);
+        return new Data(List.of(dao.countAnimals(), dao.countHospitals(), dao.countPeople(), dao.countVeterinarians(),
+                dao.countCollections(), dao.countPendingRequests(), dao.countAvailableBags()),
+                dao.percentageAuthorizedAnimals(), dao.getAnimalWeightStatistics(),
+                List.of(dao.countAnimalsBySpecies(), dao.countBagsByStatus(), dao.countRequestsByUrgency(),
+                        dao.countCollectionsByApprovalStatus(), dao.countAnimalsByWeightRange()),
+                dao.sumCollectionVolumeByMonth());
+    }
+    private void display(Data data) {
+        content.removeAll();
+        JPanel metrics = new JPanel(new GridLayout(2, 4, 12, 12));
+        for (DashboardMetric m : data.metrics()) metrics.add(card(m.label(), String.valueOf(m.value())));
+        metrics.add(card("Animais autorizados", numberFormat.format(data.percentage()) + "%"));
+        JPanel stats = new JPanel(new GridLayout(1, 5, 12, 12));
+        String[] keys = {"media", "mediana", "moda", "variancia", "desvio_padrao"};
+        String[] labels = {"Media (kg)", "Mediana (kg)", "Moda (kg)", "Variancia (kg²)", "Desvio padrao (kg)"};
+        for (int i = 0; i < keys.length; i++) {
+            Double value = data.stats().get(keys[i]);
+            stats.add(card(labels[i], value == null ? "N/A" : numberFormat.format(value)));
+        }
+        JPanel charts = new JPanel(new GridLayout(0, 2, 12, 12));
+        charts.add(bar("Animais por especie", data.groups().get(0)));
+        charts.add(pie("Bolsas por status", data.groups().get(1)));
+        charts.add(bar("Solicitacoes por urgencia", data.groups().get(2)));
+        charts.add(pie("Coletas por aprovacao", data.groups().get(3)));
+        charts.add(bar("Distribuicao dos pesos", data.groups().get(4)));
+        DefaultCategoryDataset monthly = new DefaultCategoryDataset();
+        data.monthly().forEach((label, value) -> monthly.addValue(value, "Volume (ml)", label));
+        charts.add(chart(ChartFactory.createLineChart("Volume coletado por mes", "Periodo", "Volume (ml)", monthly)));
+        for (JPanel panel : List.of(metrics, stats, charts)) {
+            panel.setBackground(UiUtils.BACKGROUND);
+            panel.setAlignmentX(Component.LEFT_ALIGNMENT);
+            content.add(panel); content.add(Box.createVerticalStrut(12));
+        }
+        content.revalidate(); content.repaint();
+    }
+    private JPanel card(String label, String text) {
+        JPanel card = UiUtils.card(); card.setLayout(new BorderLayout(4, 4));
+        JLabel value = new JLabel(text);
+        value.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 24)); value.setForeground(UiUtils.PRIMARY);
+        card.add(value, BorderLayout.CENTER); card.add(new JLabel(label), BorderLayout.SOUTH);
         return card;
     }
-
-    // -----------------------------------------------------
-    // MEDIDAS ESTATISTICAS
-    // -----------------------------------------------------
-
-    private JPanel createStatisticsPanel() {
-
-        Map<String, Double> statistics =
-                dashboardDao.getAnimalWeightStatistics();
-
-        JPanel panel = new JPanel(new GridLayout(1, 5, 12, 12));
-        panel.setBackground(UiUtils.BACKGROUND);
-
-        panel.add(createMetricCard(
-                "Media do peso (kg)",
-                formatStatistic(statistics.get("media"))
-        ));
-
-        panel.add(createMetricCard(
-                "Mediana (kg)",
-                formatStatistic(statistics.get("mediana"))
-        ));
-
-        panel.add(createMetricCard(
-                "Moda (kg)",
-                formatStatistic(statistics.get("moda"))
-        ));
-
-        panel.add(createMetricCard(
-                "Variancia (kg²)",
-                formatStatistic(statistics.get("variancia"))
-        ));
-
-        panel.add(createMetricCard(
-                "Desvio padrao (kg)",
-                formatStatistic(statistics.get("desvio_padrao"))
-        ));
-
-        return panel;
+    private JPanel bar(String title, Map<String, Integer> values) {
+        DefaultCategoryDataset data = new DefaultCategoryDataset();
+        values.forEach((label, value) -> data.addValue(value, "Total", label));
+        return chart(ChartFactory.createBarChart(title, "", "Quantidade", data));
     }
-
-    private String formatStatistic(Double value) {
-        return value == null ? "N/A" : formatNumber(value);
+    private JPanel pie(String title, Map<String, Integer> values) {
+        DefaultPieDataset<String> data = new DefaultPieDataset<>();
+        values.forEach(data::setValue);
+        return chart(ChartFactory.createPieChart(title, data, true, true, false));
     }
-
-    private String formatNumber(double value) {
-        return numberFormat.format(value);
-    }
-
-    // -----------------------------------------------------
-    // GRAFICOS
-    // -----------------------------------------------------
-
-    private JPanel createChartsPanel() {
-
-        JPanel panel = new JPanel(new GridLayout(0, 2, 12, 12));
-        panel.setBackground(UiUtils.BACKGROUND);
-
-        // Grafico 1: animais por especie
-        panel.add(createBarChart(
-                "Animais por especie",
-                "Quantidade",
-                dashboardDao.countAnimalsBySpecies()
-        ));
-
-        // Grafico 2: bolsas por status
-        panel.add(createPieChart(
-                "Bolsas por status",
-                dashboardDao.countBagsByStatus()
-        ));
-
-        // Grafico 3: solicitacoes por urgencia
-        panel.add(createBarChart(
-                "Solicitacoes por urgencia",
-                "Quantidade",
-                dashboardDao.countRequestsByUrgency()
-        ));
-
-        // Grafico 4: coletas por status de aprovacao
-        panel.add(createPieChart(
-                "Coletas por status de aprovacao",
-                dashboardDao.countCollectionsByApprovalStatus()
-        ));
-
-        // Grafico 5: distribuicao dos pesos
-        panel.add(createBarChart(
-                "Distribuicao dos pesos dos animais",
-                "Frequencia",
-                dashboardDao.countAnimalsByWeightRange()
-        ));
-
-        // Grafico 6: volume coletado por mes
-        panel.add(createLineChart(
-                "Volume de coletas por mes",
-                dashboardDao.sumCollectionVolumeByMonth()
-        ));
-
-        return panel;
-    }
-
-    // -----------------------------------------------------
-    // GRAFICO DE BARRAS
-    // -----------------------------------------------------
-
-    private JPanel createBarChart(
-            String title,
-            String axisLabel,
-            Map<String, Integer> values
-    ) {
-
-        DefaultCategoryDataset dataset =
-                new DefaultCategoryDataset();
-
-        values.forEach((label, value) ->
-                dataset.addValue(value, "Total", label)
-        );
-
-        JFreeChart chart = ChartFactory.createBarChart(
-                title,
-                "",
-                axisLabel,
-                dataset
-        );
-
-        return createChartContainer(chart);
-    }
-
-    // -----------------------------------------------------
-    // GRAFICO DE PIZZA
-    // -----------------------------------------------------
-
-    private JPanel createPieChart(
-            String title,
-            Map<String, Integer> values
-    ) {
-
-        DefaultPieDataset<String> dataset =
-                new DefaultPieDataset<>();
-
-        values.forEach(dataset::setValue);
-
-        JFreeChart chart = ChartFactory.createPieChart(
-                title,
-                dataset,
-                true,
-                true,
-                false
-        );
-
-        return createChartContainer(chart);
-    }
-
-    // -----------------------------------------------------
-    // GRAFICO DE LINHA
-    // -----------------------------------------------------
-
-    private JPanel createLineChart(
-            String title,
-            Map<String, Double> values
-    ) {
-
-        DefaultCategoryDataset dataset =
-                new DefaultCategoryDataset();
-
-        values.forEach((month, volume) ->
-                dataset.addValue(volume, "Volume (ml)", month)
-        );
-
-        JFreeChart chart = ChartFactory.createLineChart(
-                title,
-                "Periodo",
-                "Volume (ml)",
-                dataset
-        );
-
-        return createChartContainer(chart);
-    }
-
-    // -----------------------------------------------------
-    // CONTAINER DOS GRAFICOS
-    // -----------------------------------------------------
-
-    private JPanel createChartContainer(JFreeChart chart) {
-
+    private JPanel chart(JFreeChart chart) {
         chart.setBackgroundPaint(Color.WHITE);
-
-        ChartPanel chartPanel = new ChartPanel(chart);
-        chartPanel.setPreferredSize(new Dimension(500, 300));
-
-        JPanel container = UiUtils.card();
-        container.setLayout(new BorderLayout());
-        container.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        container.add(chartPanel, BorderLayout.CENTER);
-
+        chart.getPlot().setNoDataMessage("Sem dados para os filtros selecionados.");
+        ChartPanel panel = new ChartPanel(chart);
+        panel.setPreferredSize(new Dimension(500, 300));
+        panel.setMouseWheelEnabled(true);
+        panel.setDisplayToolTips(true);
+        JPanel container = UiUtils.card(); container.setLayout(new BorderLayout());
+        container.add(panel, BorderLayout.CENTER);
         return container;
     }
 }

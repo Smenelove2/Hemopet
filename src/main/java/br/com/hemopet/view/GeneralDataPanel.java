@@ -32,7 +32,7 @@ public class GeneralDataPanel extends JPanel {
         top.add(loadButton);
 
         add(top, BorderLayout.NORTH);
-        add(new JScrollPane(table), BorderLayout.CENTER);
+        add(new TableFilterPanel(table), BorderLayout.CENTER);
         loadSelectedView();
     }
 

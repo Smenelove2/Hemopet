@@ -66,7 +66,7 @@ BEGIN
       FROM animal_doador
      WHERE id_animal = NEW.id_animal;
 
-    IF v_autorizado = FALSE THEN
+    IF v_autorizado IS NULL OR v_autorizado = FALSE THEN
         SIGNAL SQLSTATE '45000'
             SET MESSAGE_TEXT = 'Coleta bloqueada: o tutor nao autorizou a doacao deste animal.';
     END IF;

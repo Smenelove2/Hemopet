@@ -1,4 +1,6 @@
 target/
+.hemopet-runtime/
+tmp/
 *.log
 .idea/
 .vscode/

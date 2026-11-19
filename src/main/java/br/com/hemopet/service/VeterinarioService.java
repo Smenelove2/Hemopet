@@ -19,6 +19,9 @@ public class VeterinarioService {
 
     public void delete(String cpf) {
         requireText(cpf, "Informe o CPF do veterinario."); // Lembrar de fazer as validações do cpf certinhas
+        if (!cpf.trim().matches("\\d{11}")) {
+            throw new ValidationException("O CPF deve possuir exatamente 11 digitos.");
+        }
         dao.delete(cpf.trim());
     }
 

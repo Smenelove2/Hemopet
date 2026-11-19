@@ -43,6 +43,9 @@ public class MainFrame extends JFrame {
             );
         }
         add(tabs, BorderLayout.CENTER);
+        tabs.addChangeListener(event -> {
+            if (tabs.getSelectedComponent() instanceof DashboardPanel dashboard) dashboard.refresh();
+        });
     }
 
     private JPanel createHeader() {

@@ -64,6 +64,7 @@ BEGIN
     DECLARE v_distribuidas INT DEFAULT 0;
     DECLARE v_ja_entregues INT DEFAULT 0;
     DECLARE v_problemas INT DEFAULT 0;
+    DECLARE v_total_itens INT DEFAULT 0;
 
     DECLARE cur_itens CURSOR FOR
         SELECT id_item, id_bolsa
@@ -85,11 +86,18 @@ BEGIN
 
     SELECT status_solicitacao INTO v_status_solicitacao
       FROM solicitacao
-     WHERE id_solicitacao = p_id_solicitacao;
+     WHERE id_solicitacao = p_id_solicitacao
+     FOR UPDATE;
 
     IF v_status_solicitacao <> 'PENDENTE' THEN
         SIGNAL SQLSTATE '45000'
             SET MESSAGE_TEXT = 'Somente solicitacoes PENDENTES podem ser processadas.';
+    END IF;
+
+    SELECT COUNT(*) INTO v_total_itens FROM item_solicitacao
+     WHERE id_solicitacao = p_id_solicitacao;
+    IF v_total_itens = 0 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Solicitacao sem itens para processar.';
     END IF;
 
     -- Relatorio de problemas desta execucao
@@ -112,7 +120,8 @@ BEGIN
         SELECT status_bolsa, data_validade
           INTO v_status_bolsa, v_validade
           FROM bolsa_hemocomponente
-         WHERE id_bolsa = v_id_bolsa;
+         WHERE id_bolsa = v_id_bolsa
+         FOR UPDATE;
 
         IF v_status_bolsa = 'DISTRIBUIDA' THEN
             SET v_ja_entregues = v_ja_entregues + 1;
