@@ -43,8 +43,34 @@ public final class UiUtils {
         return new Font(Font.SANS_SERIF, Font.BOLD, 18);
     }
 
+    public static <T> void loadAsync(JPanel parent, java.util.function.Supplier<T> load,
+                                     java.util.function.Consumer<T> display) {
+        loadAsync(parent, load, display, error -> showError(parent, error));
+    }
+
+    public static <T> void loadAsync(JPanel parent, java.util.function.Supplier<T> load,
+                                     java.util.function.Consumer<T> display,
+                                     java.util.function.Consumer<RuntimeException> failure) {
+        new javax.swing.SwingWorker<T, Void>() {
+            @Override protected T doInBackground() { return load.get(); }
+            @Override protected void done() {
+                try { display.accept(get()); }
+                catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+                catch (java.util.concurrent.ExecutionException e) {
+                    Throwable cause = e.getCause();
+                    failure.accept(cause instanceof RuntimeException r ? r : new IllegalStateException(cause));
+                }
+            }
+        }.execute();
+    }
+
     public static void showError(JPanel parent, RuntimeException exception) {
         String message = exception.getMessage();
+        if (exception instanceof java.time.format.DateTimeParseException) {
+            message = "Informe uma data valida no formato AAAA-MM-DD.";
+        } else if (exception instanceof NumberFormatException) {
+            message = "Informe um numero inteiro valido para o ID.";
+        }
         if (exception instanceof DatabaseException && exception.getCause() != null) {
             message = message + "\n\nDetalhe: " + exception.getCause().getMessage();
         }

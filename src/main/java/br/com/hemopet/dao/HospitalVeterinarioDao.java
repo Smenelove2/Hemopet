@@ -33,7 +33,7 @@ public class HospitalVeterinarioDao {
                 """;
 
         try (Connection connection = DatabaseConfig.getConnection();
-            PreparedStatement statement = connection.prepareStatement(sql)) {
+             PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, hospital.getCnpj());
             statement.setString(2, hospital.getNomeFantasia());
             statement.setBoolean(3, hospital.isAtivo());

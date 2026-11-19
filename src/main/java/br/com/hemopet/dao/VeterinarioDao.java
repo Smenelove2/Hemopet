@@ -65,7 +65,7 @@ public class VeterinarioDao {
             statement.executeUpdate();
             
         } catch (SQLException exception) {
-            throw new DatabaseException("Nao foi possivel atualizar animal.", exception);
+            throw new DatabaseException("Nao foi possivel atualizar veterinario.", exception);
         }
     }
     
@@ -77,7 +77,7 @@ public class VeterinarioDao {
             statement.setString(1, cpfVet);
             statement.executeUpdate();
         } catch (SQLException exception) {
-            throw new DatabaseException("Nao foi possivel excluir animal. Verifique se ha coletas vinculadas.", exception);
+            throw new DatabaseException("Nao foi possivel excluir veterinario. Verifique se ha coletas vinculadas.", exception);
         }
     }    
     

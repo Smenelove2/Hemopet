@@ -12,7 +12,9 @@ public final class ResultSetTableMapper {
     public static DefaultTableModel toTableModel(ResultSet resultSet) throws SQLException {
         ResultSetMetaData metaData = resultSet.getMetaData();
         int columnCount = metaData.getColumnCount();
-        DefaultTableModel model = new DefaultTableModel();
+        DefaultTableModel model = new DefaultTableModel() {
+            @Override public boolean isCellEditable(int row, int column) { return false; }
+        };
 
         for (int column = 1; column <= columnCount; column++) {
             model.addColumn(metaData.getColumnLabel(column));

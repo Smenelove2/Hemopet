@@ -38,7 +38,7 @@ public class PessoaPanel extends JPanel {
         setBackground(UiUtils.BACKGROUND);
 
         add(createForm(), BorderLayout.NORTH);
-        add(new JScrollPane(table), BorderLayout.CENTER);
+        add(new TableFilterPanel(table), BorderLayout.CENTER);
 
         refreshTable();
     }

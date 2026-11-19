@@ -205,6 +205,16 @@ private JPanel createTriggersPanel() {
 
     top.add(refreshButton);
 
+    JButton testButton = new JButton("Demonstrar bloqueio de coleta");
+    testButton.addActionListener(event -> {
+        try {
+            JOptionPane.showMessageDialog(this, service.testarTriggerColeta());
+        } catch (RuntimeException exception) {
+            UiUtils.showError(this, exception);
+        }
+    });
+    top.add(testButton);
+
     panel.add(top, BorderLayout.NORTH);
     panel.add(new JScrollPane(logTable), BorderLayout.CENTER);
 

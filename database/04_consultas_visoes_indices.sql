@@ -1,14 +1,24 @@
 USE hemopet;
 
 -- Indices para acelera a busca de bolsas por status e tipo, usado na view de estoque
-CREATE INDEX idx_bolsa_status_tipo
-ON  bolsa_hemocomponente(status_bolsa, data_validade);
+SET @ddl = IF(EXISTS(SELECT 1 FROM information_schema.statistics
+    WHERE table_schema = DATABASE() AND table_name = 'bolsa_hemocomponente'
+      AND index_name IN ('idx_bolsa_status_tipo', 'idx_bolsa_status_validade')),
+    'SELECT 1', 'CREATE INDEX idx_bolsa_status_tipo ON bolsa_hemocomponente(status_bolsa, data_validade)');
+PREPARE ddl_stmt FROM @ddl;
+EXECUTE ddl_stmt;
+DEALLOCATE PREPARE ddl_stmt;
 
 -- Indice para acelerar a filtragem de soliçitacoes por urgencia e data, usado em relatorio
-CREATE INDEX idx_solicitacao_urgencia_data
-ON solicitacao(urgencia, data_solicitacao);
+SET @ddl = IF(EXISTS(SELECT 1 FROM information_schema.statistics
+    WHERE table_schema = DATABASE() AND table_name = 'solicitacao'
+      AND index_name = 'idx_solicitacao_urgencia_data'),
+    'SELECT 1', 'CREATE INDEX idx_solicitacao_urgencia_data ON solicitacao(urgencia, data_solicitacao)');
+PREPARE ddl_stmt FROM @ddl;
+EXECUTE ddl_stmt;
+DEALLOCATE PREPARE ddl_stmt;
 
---ANTI JOIN, lista os tutores que ainda não possuem nenhum animal doador vinculado
+-- ANTI JOIN, lista os tutores que ainda não possuem nenhum animal doador vinculado
 SELECT p.cpf,
     p.nome,
     p.cidade
@@ -17,7 +27,7 @@ JOIN pessoa p ON t.cpf = p.cpf
 LEFT JOIN animal_doador a ON t.cpf = a.cpf_tutor
 WHERE a.id_animal IS NULL;
 
---FULL OUTER JOIN
+-- FULL OUTER JOIN
 -- Cruzamento completo entre hospitais veterinarios e solicitaçoes
 SELECT h.nome_fantasia,
        h.cnpj,
@@ -25,7 +35,7 @@ SELECT h.nome_fantasia,
        s.urgencia,
        s.status_solicitacao
 FROM hospital_veterinario h
-LEFT JOIN solicitacao S ON h.id_hospital = s.id_hospital
+LEFT JOIN solicitacao s ON h.id_hospital = s.id_hospital
 UNION
 SELECT 
     h.nome_fantasia,
@@ -36,8 +46,8 @@ SELECT
 FROM hospital_veterinario h
 RIGHT JOIN solicitacao s ON h.id_hospital = s.id_hospital;
 
---Subconsulta
---Buscar coletas que tiveram volume coletado acima da media geral
+-- Subconsulta
+-- Buscar coletas que tiveram volume coletado acima da media geral
 SELECT 
     c.id_coleta,
     c.data_hora,
@@ -51,7 +61,7 @@ WHERE c.volume_ml_total > (
     FROM coleta
 );
 
---Subconsulta 2
+-- Subconsulta 2
 -- Listar os veterinarios que ja realizaram/aprovaram pelo menos uma coleta.
 SELECT 
     p.nome AS nome_veterinario,
@@ -65,8 +75,8 @@ WHERE EXISTS (
       AND c.status_aprovacao = 'APROVADA'
 );
 
---VIEWS
---Visao 1: painel completo de rastreabilidade de doaçoes (Relação Tutor -> Animal -> Coleta -> Bolsa -> Vet)
+-- VIEWS
+-- Visao 1: painel completo de rastreabilidade de doaçoes (Relação Tutor -> Animal -> Coleta -> Bolsa -> Vet)
 -- Justificativa Semântica: Permite à equipe de auditoria rastrear rapidamente a origem de cada bolsa de sangue, 
 -- desde o tutor e o animal doador até o veterinário que realizou a coleta.
 CREATE OR REPLACE VIEW vw_rastreabilidade_doacao AS
@@ -98,13 +108,15 @@ SELECT
     h.nome_fantasia AS hospital,
     h.cnpj,
     s.id_solicitacao,
+    s.data_solicitacao,
     s.urgencia,
     s.status_solicitacao,
     its.id_item,
     its.quantidade,
     its.ht_percentual,
     b.id_bolsa,
-    b.tipo_componente
+    b.tipo_componente,
+    b.status_bolsa
 FROM hospital_veterinario h
 JOIN solicitacao s ON h.id_hospital = s.id_hospital
 JOIN item_solicitacao its ON s.id_solicitacao = its.id_solicitacao
