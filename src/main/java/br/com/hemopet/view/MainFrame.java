@@ -25,10 +25,14 @@ public class MainFrame extends JFrame {
         JTabbedPane tabs = new JTabbedPane();
         if (DatabaseConfig.canConnect()) {
             tabs.addTab("Dashboard", new DashboardPanel());
+            tabs.addTab("Pessoas", new PessoaPanel());
+            tabs.addTab("Veterinarios", new VeterinarioPanel());
             tabs.addTab("Animais", new AnimalDoadorPanel());
             tabs.addTab("Hospitais", new HospitalVeterinarioPanel());
             tabs.addTab("Consultas", new QueryPanel());
             tabs.addTab("Dados Gerais", new GeneralDataPanel());
+            tabs.addTab("Etapa 05", new Etapa5Panel());
+
         } else {
             tabs.addTab("Conexao", createConnectionErrorPanel());
             JOptionPane.showMessageDialog(
